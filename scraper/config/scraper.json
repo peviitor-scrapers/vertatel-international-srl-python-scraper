@@ -1,0 +1,5 @@
+{
+  "apiBase": "https://api.peviitor.ro/v1",
+  "apiPath": "/scraper/jobs/",
+  "jobDetailsPrefix": "https://mediere.anofm.ro/app/module/mediere/job/"
+}

@@ -16,6 +16,7 @@ from .anaf import search_anofm
 from .api import delete_job_by_url, delete_jobs_by_cif, query_solr, upsert_company, upsert_jobs
 from .company import validate_and_get_company
 from .config import company_config, scraper_config
+from .ejobs import search_ejobs
 from .jobrapid import search_jobrapid
 
 COMPANY_CIF = str(company_config["id"])
@@ -23,6 +24,8 @@ ANOFM_CIF = str(int(COMPANY_CIF))
 JOB_DETAILS_PREFIX = scraper_config["jobDetailsPrefix"]
 JOBRAPID_PREFIX = "https://www.jobrapid.ro/locuri-de-munca/"
 JOBRAPID_COMPANY = company_config.get("brand") or company_config["company"]
+EJOBS_PREFIX = "https://www.ejobs.ro/user/locuri-de-munca/"
+EJOBS_COMPANY_URL = scraper_config.get("ejobsCompanyUrl")
 COMPANY_NAME = None
 
 
@@ -73,7 +76,8 @@ def main(root=None):
     existing_count = existing_result["numFound"]
     existing_urls = {doc.get("url") for doc in existing_result["docs"]
                      if doc.get("url") and (doc["url"].startswith(JOB_DETAILS_PREFIX)
-                                            or doc["url"].startswith(JOBRAPID_PREFIX))}
+                                            or doc["url"].startswith(JOBRAPID_PREFIX)
+                                            or doc["url"].startswith(EJOBS_PREFIX))}
     print(f"Found {existing_count} existing jobs in SOLR ({len(existing_urls)} from tracked sources)")
 
     print("=== Step 2: Validate company via ANAF ===")
@@ -107,13 +111,15 @@ def main(root=None):
     print("=== Step 3: Scrape VERTATEL INTERNATIONAL S.R.L. jobs ===")
     anofm_jobs = search_anofm(ANOFM_CIF)
     jobrapid_jobs = search_jobrapid(JOBRAPID_COMPANY)
+    ejobs_jobs = search_ejobs(EJOBS_COMPANY_URL)
     print(f"Jobs scraped from ANOFM: {len(anofm_jobs)}")
     print(f"Jobs scraped from jobRapid: {len(jobrapid_jobs)}")
+    print(f"Jobs scraped from eJobs: {len(ejobs_jobs)}")
 
-    raw_jobs = anofm_jobs + jobrapid_jobs
+    raw_jobs = anofm_jobs + jobrapid_jobs + ejobs_jobs
     jobs = [map_to_job_model(job, company_cif) for job in raw_jobs]
     payload = {
-        "source": "mediere.anofm.ro, jobrapid.ro",
+        "source": "mediere.anofm.ro, jobrapid.ro, ejobs.ro",
         "scrapedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "company": COMPANY_NAME,
         "cif": company_cif,
@@ -149,6 +155,7 @@ def main(root=None):
     print(f"Jobs existing in SOLR before scrape: {existing_count}")
     print(f"Jobs scraped from ANOFM: {len(anofm_jobs)}")
     print(f"Jobs scraped from jobRapid: {len(jobrapid_jobs)}")
+    print(f"Jobs scraped from eJobs: {len(ejobs_jobs)}")
     print(f"Stale jobs attempted: {len(stale_urls)}")
     print(f"Jobs in SOLR after scrape: {final_result['numFound']}")
 

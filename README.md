@@ -7,7 +7,8 @@ It collects postings from ANOFM and jobRapid and publishes them to
 ## Sources
 
 - **ANOFM** — `https://mediere.anofm.ro` (primary, filtered by CIF)
-- **jobRapid** — `https://www.jobrapid.ro/companie/vertatel-international-227507.html` (secondary, filtered by company name)
+- **jobRapid** — `https://www.jobrapid.ro/companie/vertatel-international-227507.html` (filtered by company name)
+- **eJobs** — `https://www.ejobs.ro/company/sc-vertatel-international-srl/48117` (company page)
 
 ## Run
 
@@ -28,6 +29,7 @@ scraper/
   api.py          # Peviitor v1 API client
   anaf.py         # ANAF validation + ANOFM search
   jobrapid.py     # jobRapid search + JSON-LD parsing
+  ejobs.py        # eJobs company page scraping
   company.py      # config loader
   config/
     company.json  # company identity (single source of truth)

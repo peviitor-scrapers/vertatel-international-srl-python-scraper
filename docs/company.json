@@ -1,0 +1,14 @@
+{
+  "id": "37633940",
+  "company": "VERTATEL INTERNATIONAL S.R.L.",
+  "brand": "Vertatel International",
+  "status": "activ",
+  "location": ["Măgurele"],
+  "website": [],
+  "career": [
+    "https://mediere.anofm.ro/app/module/mediere/jobs",
+    "https://www.jobrapid.ro/companie/vertatel-international-227507.html",
+    "https://www.ejobs.ro/company/sc-vertatel-international-srl/48117"
+  ],
+  "scraperFile": "https://github.com/peviitor-scrapers/vertatel-international-srl-python-scraper/actions/workflows/job-seeker-ro-spider.yml"
+}

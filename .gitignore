@@ -5,6 +5,12 @@ __pycache__/
 .venv/
 venv/
 .env
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node (template remnants)
+node_modules/
 
 # Scraper artifacts
 scraper/jobs.json

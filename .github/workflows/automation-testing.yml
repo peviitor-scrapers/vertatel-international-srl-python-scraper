@@ -1,0 +1,248 @@
+name: Automation Tests
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (no deletions)'
+        required: true
+        default: 'true'
+
+jobs:
+  validate-jobs:
+    runs-on: ubuntu-latest
+    needs: Automation-Tests
+    # On the daily schedule Automation-Tests is intentionally skipped, so
+    # `always()` is needed to let this job run. Manual dispatch keeps the old
+    # ordering: validation only runs after the full suite has passed.
+    if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && needs.Automation-Tests.result == 'success'))
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt
+
+      - name: Validate and remove expired jobs
+        run: |
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            echo "Schedule trigger — running LIVE mode..."
+            python3 -m scraper.validate_jobs --mode content --delete
+          elif [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "Running in DRY RUN mode..."
+            python3 -m scraper.validate_jobs --mode content --dry-run
+          else
+            echo "Running in LIVE mode (will delete expired jobs)..."
+            python3 -m scraper.validate_jobs --mode content --delete
+          fi
+
+  ensure-company-core:
+    runs-on: ubuntu-latest
+    # The daily schedule only runs validate-jobs; company core is already
+    # reconciled by the scrape workflow and on every push/PR here.
+    if: github.event_name != 'schedule'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ensure company exists in company core
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          CIF=$(jq -r '.id' scraper/config/company.json)
+          LEGAL_NAME=$(jq -r '.company' scraper/config/company.json)
+          BRAND=$(jq -r '.brand' scraper/config/company.json)
+          WEBSITE=$(jq -r '.website[0]' scraper/config/company.json)
+          CAREER=$(jq -r '.career[0]' scraper/config/company.json)
+          DEFAULT_LOC=$(jq -r '.location[0]' scraper/config/company.json)
+          SCRAPER_FILE=$(jq -r '.scraperFile' scraper/config/company.json)
+
+          jq -n \
+            --arg id "$CIF" \
+            --arg company "$LEGAL_NAME" \
+            --arg brand "$BRAND" \
+            --arg website "$WEBSITE" \
+            --arg career "$CAREER" \
+            --arg loc "$DEFAULT_LOC" \
+            --arg today "$TODAY" \
+            --arg scraperFile "$SCRAPER_FILE" \
+            '{id:$id,company:$company,brand:$brand,status:"activ",location:[$loc],website:[$website],career:[$career],lastScraped:$today,scraperFile:$scraperFile}' \
+            > company_data.json
+
+          echo "Upserting ${BRAND} (CIF: ${CIF}) via peviitor API..."
+          curl -s -X PUT \
+            "https://api.peviitor.ro/v1/firme/company/add/" \
+            -H "Content-Type: application/json" \
+            --data-binary @company_data.json
+
+          FINAL=$(curl -s \
+            "https://api.peviitor.ro/v1/firme/company/?cif=${CIF}" | jq '.total')
+
+          echo "${BRAND} count after upsert: $FINAL"
+
+          if [ "$FINAL" -ge "1" ]; then
+            echo "SUCCESS: ${BRAND} is in company core"
+          else
+            echo "FAILED: ${BRAND} still not in company core"
+            exit 1
+          fi
+
+  Automation-Tests:
+    runs-on: ubuntu-latest
+    needs: ensure-company-core
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Sync with remote
+        if: github.event_name != 'pull_request'
+        run: git pull origin main --rebase -X theirs
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt
+
+      - name: Run Unit Tests
+        run: |
+          mkdir -p docs/test-results
+          python3 -m pytest tests/unit tests/consistency \
+            --html=docs/test-results/pre-scrape-unit.html --self-contained-html || true
+
+      - name: Upload Unit Test Results
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-results
+          path: docs/test-results/pre-scrape-unit.html
+          retention-days: 30
+
+      - name: Run Integration Tests
+        run: |
+          mkdir -p docs/test-results
+          python3 -m pytest tests/integration \
+            --html=docs/test-results/pre-scrape-integration.html --self-contained-html || true
+
+      - name: Upload Integration Test Results
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-test-results
+          path: docs/test-results/pre-scrape-integration.html
+          retention-days: 30
+
+      - name: Run E2E Tests
+        run: |
+          mkdir -p docs/test-results
+          python3 -m pytest tests/e2e \
+            --html=docs/test-results/post-scrape.html --self-contained-html || true
+
+      - name: Upload E2E Test Results
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-test-results
+          path: docs/test-results/post-scrape.html
+          retention-days: 30
+
+      - name: Generate test-results index
+        if: always()
+        run: |
+          mkdir -p docs/test-results
+          COMPANY_NAME=$(jq -r '.company' scraper/config/company.json 2>/dev/null || echo "Scraper")
+          NAV_ITEMS=""
+          add_nav() { if [ -f "docs/test-results/$1.html" ]; then NAV_ITEMS="${NAV_ITEMS}<a href=\"$1.html\" style=\"color:#9a9fac;text-decoration:none;margin-left:1rem\">$2</a>"; fi; }
+          add_nav pre-scrape-unit "Unit"
+          add_nav pre-scrape-integration "Integration"
+          add_nav post-scrape "E2E"
+          add_nav post-scrape-consistency "Consistency"
+          NAVBAR="<div data-pv-navbar style=\"font-family:'JetBrains Mono',monospace;background:#131317;border-bottom:2px solid #e0122a;color:#9a9fac;padding:.6rem 1.1rem;font-size:.75rem;letter-spacing:.04em\"><a href=\"../\" style=\"color:#e0122a;text-decoration:none;font-weight:700\">&larr; DASHBOARD</a>${NAV_ITEMS}</div>"
+          NAVBAR_ESC=$(printf '%s' "$NAVBAR" | sed 's/[&\]/\\&/g')
+          for f in docs/test-results/*.html; do
+            [ -f "$f" ] || continue
+            case "$f" in */index.html) continue;; esac
+            grep -q "data-pv-navbar" "$f" 2>/dev/null && continue
+            sed -i "s|<body>|<body>${NAVBAR_ESC}|" "$f" || true
+          done
+          BASE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME:-main}"
+          BASE_URL_ESC=$(printf '%s' "$BASE_URL" | sed 's/[&\]/\\&/g')
+          for f in docs/test-results/*.html; do
+            [ -f "$f" ] || continue
+            case "$f" in */index.html) continue;; esac
+            grep -q 'suite-path"><a ' "$f" 2>/dev/null && continue
+            sed -i -E "s|<div class=\"suite-path\">${GITHUB_WORKSPACE}/([^<]*)</div>|<div class=\"suite-path\"><a href=\"${BASE_URL_ESC}/\1\" target=\"_blank\" rel=\"noopener\" style=\"color:inherit;text-decoration:underline\">\1</a></div>|g" "$f" || true
+          done
+          {
+            echo "<!DOCTYPE html><html lang=\"ro\"><head><meta charset=\"UTF-8\">"
+            echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+            echo "<title>Rezultate teste — ${COMPANY_NAME}</title>"
+            echo "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">"
+            echo "<link href=\"https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=JetBrains+Mono:wght@400;500;700&display=swap\" rel=\"stylesheet\">"
+            echo "<style>"
+            echo ":root{--ink:#eceef1;--ink-dim:#9a9fac;--ink-faint:#5c616e;--bg:#0a0a0d;--surface:#131317;--surface2:#1a1a20;--border:#2a2a32;--red:#e0122a;--red-dim:#8c0c1c;--radius:3px}"
+            echo "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}"
+            echo "body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--ink);min-height:100vh;padding:2rem 1.25rem 4rem}"
+            echo ".wrap{max-width:900px;margin:0 auto}"
+            echo "h1{font-family:'Oswald',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:1.4rem;margin-bottom:.3rem}"
+            echo "p.sub{color:var(--ink-faint);font-size:.8rem;margin-bottom:1.5rem}"
+            echo "a.back{color:var(--red);text-decoration:none;font-weight:700;font-size:.75rem;display:inline-block;margin-bottom:1rem}"
+            echo ".tests-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:var(--border);border:1px solid var(--border)}"
+            echo ".test-card{background:var(--surface);padding:1.1rem;text-decoration:none;color:var(--ink);border-top:2px solid transparent;transition:.15s}"
+            echo ".test-card:hover{border-top-color:var(--red);background:var(--surface2)}"
+            echo ".test-card .t{font-family:'Oswald',sans-serif;font-weight:600;font-size:.85rem;text-transform:uppercase;letter-spacing:.03em}"
+            echo ".test-card .s{color:var(--ink-faint);font-size:.72rem;margin-top:.3rem}"
+            echo "</style></head><body><div class=\"wrap\">"
+            echo "<a class=\"back\" href=\"../\">&larr; DASHBOARD</a>"
+            echo "<h1>Rezultate teste</h1><p class=\"sub\">${COMPANY_NAME}</p>"
+            echo "<div class=\"tests-grid\">"
+            add_entry() {
+              local file="$1" title="$2"
+              if [ -f "docs/test-results/${file}.html" ]; then
+                echo "<a class=\"test-card\" href=\"${file}.html\"><div class=\"t\">${title}</div><div class=\"s\">View report &rarr;</div></a>"
+              fi
+            }
+            add_entry pre-scrape-unit "Unit + Consistency Tests"
+            add_entry pre-scrape-integration "Integration Tests"
+            add_entry post-scrape "E2E Tests"
+            echo "</div></div></body></html>"
+          } > docs/test-results/index.html
+
+      - name: Push test results to docs/
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/test-results/
+          git commit -m "[skip ci] Update test results" || echo "No changes to commit"
+          # The scrape workflow publishes the same docs; rebase and retry
+          # rather than losing freshly generated reports to a concurrent push.
+          pushed=false
+          for attempt in 1 2 3; do
+            git fetch origin main || break
+            if git rebase -X theirs origin/main; then
+              if git push origin HEAD:main; then pushed=true; break; fi
+            else
+              git rebase --abort || true
+            fi
+            sleep 5
+          done
+          if [ "$pushed" != "true" ]; then echo "Push failed after 3 attempts"; fi

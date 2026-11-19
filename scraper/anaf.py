@@ -1,28 +1,26 @@
 """
-ANAF Company Data Module
-
-Fetches and validates company data from Romanian public registries.
+Company Data Module — CUIScan + CUIFirma
 
 Strategy:
-- get_company_from_anaf: 1 try cuiscan.ro → 1 try demoanaf.ro (demoanaf now
-  requires payment, so cuiscan.ro is tried first).
-- search_company: 1 try demoanaf.ro → 1 try cuifirma.ro.
-- get_company_from_anaf_with_fallback: cuiscan/demoanaf → cached data.
+- get_company_from_anaf: CUIScan only (company details by CIF).
+- search_company: CUIFirma only (brand search).
+- get_company_from_anaf_with_fallback: CUIScan → cached data.
 """
 
 import json
-import os
 import pathlib
 
 import requests
 
-ANAF_API_URL = "https://demoanaf.ro/api/company/"
-ANAF_SEARCH_URL = "https://demoanaf.ro/api/search"
 CUISCAN_API_URL = "https://cuiscan.ro/api.php"
 CUISFIRMA_SEARCH_URL = "https://www.cuifirma.ro/api/search"
 
 HEADERS = {"User-Agent": "job_seeker_ro_spider"}
 CACHE_FILE = pathlib.Path(__file__).resolve().parent / "anaf_cache.json"
+
+
+class _NoCompanyData(RuntimeError):
+    pass
 
 
 # ============================================================================
@@ -100,24 +98,20 @@ def search_anofm(cif):
 # ============================================================================
 
 def search_company(brand_name):
-    """Searches for a company by brand name. Returns a list of company dicts."""
-    try:
-        data = _fetch_json(f"{ANAF_SEARCH_URL}?q={brand_name}")
-        results = data.get("data") or data.get("cautare") or []
-        if results:
-            return results
-    except Exception:
-        pass
-
+    """Searches CUIFirma by brand name. Returns a list of company dicts."""
     try:
         data = _fetch_json(f"{CUISFIRMA_SEARCH_URL}?q={brand_name}")
-        results = data.get("data") or []
-        if results:
-            return results
+        results = data.get("data") or data.get("results") or []
+        return [
+            {
+                "cui": str(row.get("cui")),
+                "name": row.get("name"),
+                "statusLabel": row.get("status_label") or "",
+            }
+            for row in results
+        ]
     except Exception:
-        pass
-
-    return []
+        return []
 
 
 # ============================================================================
@@ -125,59 +119,39 @@ def search_company(brand_name):
 # ============================================================================
 
 def get_company_from_anaf(cif):
-    """Fetches company data for a CIF, trying cuiscan.ro first (demoanaf.ro now
-    requires payment). Falls back to demoanaf.ro and then cached data."""
+    """Fetches company data from CUIScan by CIF.
+
+    Network/HTTP failures return None so the caller can use its cache; an empty
+    or nameless response raises, because scraping cannot proceed without a
+    verified legal name.
+    """
     try:
         data = _fetch_json(f"{CUISCAN_API_URL}?action=company&cui={cif}")
-        if data and data.get("denumire"):
-            return {
-                "cif": str(data.get("cui")),
-                "denumire": data.get("denumire"),
-                "adresa": data.get("adresa"),
-                "stareInregistrare": "INREGISTRAT" if data.get("activ") else "INACTIV",
-                "nrRegCom": data.get("nrRegCom"),
-                "codCaen": str(data.get("codCaen") or ""),
-                "dataInregistrare": data.get("dataInregistrare"),
-            }
     except Exception:
-        pass
-
-    try:
-        data = _fetch_json(f"{ANAF_API_URL}{cif}")
-        if data and data.get("denumire"):
-            return _normalize_company(data)
-    except Exception:
-        pass
-
-    return None
+        return None
+    if not data or not data.get("denumire"):
+        raise _NoCompanyData("CUIScan returned no data or company name")
+    return {
+        "cif": str(data.get("cui") or cif),
+        "denumire": data.get("denumire"),
+        "adresa": data.get("adresa"),
+        "nrRegCom": data.get("nrRegCom"),
+        "codCaen": str(data.get("codCaen") or ""),
+        "dataInregistrare": data.get("dataInregistrare"),
+    }
 
 
 def get_company_from_anaf_with_fallback(cif, cached=None):
-    """Returns fresh ANAF data, falling back to cached data if the API fails."""
+    """Returns fresh CUIScan data, falling back to cached data on network errors."""
     cache = cached if cached is not None else _read_cache()
-    try:
-        company = get_company_from_anaf(cif)
-        if company:
-            cache[str(cif)] = company
-            _write_cache(cache)
-            return company
-    except Exception:
-        pass
+    company = get_company_from_anaf(cif)
+    if company:
+        cache[str(cif)] = company
+        _write_cache(cache)
+        return company
 
     cached_company = cache.get(str(cif))
     if cached_company:
         return cached_company
 
-    raise RuntimeError(f"ANAF API failed and no cached data available for CIF {cif}")
-
-
-def _normalize_company(data):
-    return {
-        "cif": str(data.get("cif")),
-        "denumire": data.get("denumire"),
-        "adresa": data.get("adresa"),
-        "stareInregistrare": data.get("stareInregistrare"),
-        "nrRegCom": data.get("nrRegCom"),
-        "codCaen": str(data.get("codCaen") or ""),
-        "dataInregistrare": data.get("dataInregistrare"),
-    }
+    raise RuntimeError(f"CUIScan failed and no cached data available for CIF {cif}")

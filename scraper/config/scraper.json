@@ -2,5 +2,7 @@
   "apiBase": "https://api.peviitor.ro/v1",
   "apiPath": "/scraper/jobs/",
   "jobDetailsPrefix": "https://mediere.anofm.ro/app/module/mediere/job/",
+  "jobRapidPrefix": "https://www.jobrapid.ro/locuri-de-munca/",
+  "ejobsPrefix": "https://www.ejobs.ro/user/locuri-de-munca/",
   "ejobsCompanyUrl": "https://www.ejobs.ro/company/sc-vertatel-international-srl/48117"
 }

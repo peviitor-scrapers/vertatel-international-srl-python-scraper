@@ -8,7 +8,7 @@ This module handles:
 - Querying jobs by company CIF (via peviitor API)
 - Querying/upserting company data (via peviitor API)
 - Adding/updating (upserting) jobs (via peviitor API)
-- Deleting jobs by CIF or URL (via peviitor API)
+- Deleting jobs by URL (via peviitor API)
 
 All Solr operations go through the peviitor API — no direct Solr access.
 
@@ -21,16 +21,45 @@ Endpoints mirror the Node.js template (api.peviitor.ro v1):
 - DELETE /v1/scraper/jobs/delete/
 """
 
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import requests
 
 API_BASE_URL = "https://api.peviitor.ro/v1"
 TIMEOUT = 10
 HEADERS = {"User-Agent": "job_seeker_ro_spider"}
+RETRY_DELAYS = (0.25, 0.5)
 
 
-def pad_cif(cif):
-    """Zero-pads a CIF to exactly 8 digits (Peviitor API requirement)."""
-    return str(cif).zfill(8)
+def _request_with_retry(call, label):
+    """Retries transient API failures; keeps HTTP 4xx (except 429) immediate."""
+    last_error = None
+    for delay in (0, *RETRY_DELAYS):
+        if delay:
+            time.sleep(delay)
+        try:
+            res = call()
+            if res.status_code == 429 or res.status_code >= 500:
+                last_error = RuntimeError(f"API {label} error: {res.status_code} - {res.text}")
+                continue
+            return res
+        except requests.RequestException as err:
+            last_error = err
+    raise last_error
+
+
+def map_with_concurrency(items, worker, limit=5):
+    """Runs worker over items with bounded concurrency, preserving input order."""
+    items = list(items)
+    if not items:
+        return []
+    results = [None] * len(items)
+    with ThreadPoolExecutor(max_workers=max(1, min(limit, len(items)))) as pool:
+        futures = {pool.submit(worker, item, i): i for i, item in enumerate(items)}
+        for future in as_completed(futures):
+            results[futures[future]] = future.result()
+    return results
 
 
 # ============================================================================
@@ -39,10 +68,9 @@ def pad_cif(cif):
 
 def get_company_by_cif(cif):
     """Searches for a company by CIF using the peviitor API."""
-    url = f"{API_BASE_URL}/firme/company/?cif={pad_cif(cif)}"
-    res = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-    if res.status_code != 200:
-        raise RuntimeError(f"API company search error: {res.status_code}")
+    url = f"{API_BASE_URL}/firme/company/?cif={cif}"
+    res = _request_with_retry(
+        lambda: requests.get(url, headers=HEADERS, timeout=TIMEOUT), "company search")
     data = res.json()
     if not data.get("success"):
         raise RuntimeError(f"API company search failed: {data}")
@@ -53,9 +81,8 @@ def get_company_by_cif(cif):
 def search_company_by_name(name):
     """Searches for companies by name using the peviitor API."""
     url = f"{API_BASE_URL}/firme/company/?name={name}"
-    res = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-    if res.status_code != 200:
-        raise RuntimeError(f"API company search error: {res.status_code}")
+    res = _request_with_retry(
+        lambda: requests.get(url, headers=HEADERS, timeout=TIMEOUT), "company search")
     data = res.json()
     if not data.get("success"):
         raise RuntimeError(f"API company search failed: {data}")
@@ -65,7 +92,7 @@ def search_company_by_name(name):
 def upsert_company(company_doc):
     """Upserts a company document via the peviitor API."""
     url = f"{API_BASE_URL}/firme/company/add/"
-    payload = {**company_doc, "id": pad_cif(company_doc["id"])}
+    payload = {**company_doc, "id": company_doc["id"]}
     res = requests.put(
         url,
         json=payload,
@@ -86,10 +113,9 @@ def upsert_company(company_doc):
 
 def query_solr(cif):
     """Queries jobs from Solr by company CIF via the peviitor API."""
-    url = f"{API_BASE_URL}/scraper/jobs/?cif={pad_cif(cif)}&rows=500"
-    res = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-    if res.status_code != 200:
-        raise RuntimeError(f"API jobs query error: {res.status_code} - {res.text}")
+    url = f"{API_BASE_URL}/scraper/jobs/?cif={cif}&rows=500"
+    res = _request_with_retry(
+        lambda: requests.get(url, headers=HEADERS, timeout=TIMEOUT), "jobs query")
     data = res.json()
     return {
         "numFound": data.get("total", 0),
@@ -100,24 +126,6 @@ def query_solr(cif):
 # ============================================================================
 # DELETE OPERATIONS
 # ============================================================================
-
-def delete_jobs_by_cif(cif):
-    """Deletes all jobs for a company by CIF via the peviitor API."""
-    url = f"{API_BASE_URL}/scraper/jobs/delete/"
-    res = requests.delete(
-        url,
-        json={"cif": pad_cif(cif)},
-        headers={**HEADERS, "Content-Type": "application/json"},
-        timeout=TIMEOUT,
-    )
-    if res.status_code == 404:
-        print(f"⚠️ No jobs found for CIF {cif} — nothing to delete.")
-        return
-    if res.status_code != 200:
-        raise RuntimeError(f"API jobs delete error: {res.status_code} - {res.text}")
-    data = res.json()
-    print(f"✅ Deleted {data.get('count', 0)} jobs for CIF {cif} via API.")
-
 
 def delete_job_by_url(url):
     """Deletes a single job by its URL via the peviitor API."""
@@ -141,10 +149,9 @@ def delete_job_by_url(url):
 def upsert_jobs(jobs):
     """Upserts (adds or updates) jobs via the peviitor API."""
     url = f"{API_BASE_URL}/scraper/jobs/upload/"
-    padded_jobs = [{**job, "cif": pad_cif(job["cif"])} for job in jobs]
     res = requests.post(
         url,
-        json=padded_jobs,
+        json=jobs,
         headers={**HEADERS, "Content-Type": "application/json"},
         timeout=TIMEOUT,
     )
@@ -191,11 +198,10 @@ def run_verification(cif, delete=False, prefix=None):
         loc = ", ".join(job.get("location") or [])
         print(f"{i+1}. {job.get('title')} ({loc}) - {job.get('workmode')}")
 
+    checks = map_with_concurrency(result["docs"], lambda job, _: check_url(job.get("url", "")))
     invalid_urls = []
-    total = result["numFound"]
-    for i, job in enumerate(result["docs"], start=1):
-        res = check_url(job.get("url", ""))
-        print(f"[{i}/{total}] {res['status'] if res['status'] > 0 else 'ERR'} - {job.get('url')}")
+    for i, (job, res) in enumerate(zip(result["docs"], checks), start=1):
+        print(f"[{i}/{result['numFound']}] {res['status'] if res['status'] > 0 else 'ERR'} - {job.get('url')}")
         if not res["valid"]:
             invalid_urls.append(job.get("url"))
 
@@ -217,8 +223,7 @@ def run_verification(cif, delete=False, prefix=None):
         return
 
     print(f"\n⚠️ Deleting {len(deletable)} invalid board URL(s) via API...")
-    for url in deletable:
-        delete_job_by_url(url)
+    map_with_concurrency(deletable, lambda url, _: delete_job_by_url(url), limit=3)
     print(f"✅ Deleted {len(deletable)} invalid jobs via API")
 
 

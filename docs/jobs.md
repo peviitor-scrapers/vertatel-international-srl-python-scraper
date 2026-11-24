@@ -7,7 +7,7 @@
 | CIF | 37633940 |
 | Brand | Vertatel International |
 | Career | https://mediere.anofm.ro/app/module/mediere/jobs |
-| LastScraped | 2026-11-23 |
+| LastScraped | 2026-11-24 |
 
 ## Jobs (38)
 
@@ -240,4 +240,4 @@
 - **Status**: scraped
 
 ---
-_Generated at 2026-11-23T17:43:22Z_
+_Generated at 2026-11-24T17:14:42Z_

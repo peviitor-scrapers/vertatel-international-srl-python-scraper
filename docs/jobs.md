@@ -7,9 +7,111 @@
 | CIF | 37633940 |
 | Brand | Vertatel International |
 | Career | https://mediere.anofm.ro/app/module/mediere/jobs |
-| LastScraped | 2026-11-24 |
+| LastScraped | 2026-11-25 |
 
-## Jobs (38)
+## Jobs (55)
+
+### STIVUITORIST
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456742](https://mediere.anofm.ro/app/module/mediere/job/3456742)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### MECANIC AUTO
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456740](https://mediere.anofm.ro/app/module/mediere/job/3456740)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### FEMEIE DE SERVICIU
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456737](https://mediere.anofm.ro/app/module/mediere/job/3456737)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### OPERATOR INTRODUCERE, VALIDARE SI PRELUCRARE DATE
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456736](https://mediere.anofm.ro/app/module/mediere/job/3456736)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### MASINIST LA MASINI PENTRU TERASAMENTE (IFRONIST)
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456734](https://mediere.anofm.ro/app/module/mediere/job/3456734)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### MUNCITOR NECALIFICAT LA ÎNTRETINEREA DE DRUMURI, SOSELE, PODURI, BARAJE
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456733](https://mediere.anofm.ro/app/module/mediere/job/3456733)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### FIERAR BETONIST
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456732](https://mediere.anofm.ro/app/module/mediere/job/3456732)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### ZIDAR ROSAR-TENCUITOR
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456728](https://mediere.anofm.ro/app/module/mediere/job/3456728)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### SOFER DE AUTOTURISME SI CAMIONETE
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456727](https://mediere.anofm.ro/app/module/mediere/job/3456727)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### ELECTRICIAN ÎN CONSTRUCTII
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456725](https://mediere.anofm.ro/app/module/mediere/job/3456725)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### TOPOGRAF
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456723](https://mediere.anofm.ro/app/module/mediere/job/3456723)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### DULGHER RESTAURATOR
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456719](https://mediere.anofm.ro/app/module/mediere/job/3456719)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### SUDOR
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456716](https://mediere.anofm.ro/app/module/mediere/job/3456716)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### INSTALATOR APA, CANAL
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456703](https://mediere.anofm.ro/app/module/mediere/job/3456703)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### INGINER ELECTRICIAN
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456700](https://mediere.anofm.ro/app/module/mediere/job/3456700)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### INGINER CONSTRUCTII CIVILE, INDUSTRIALE SI AGRICOLE
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456695](https://mediere.anofm.ro/app/module/mediere/job/3456695)
+- **Location**: MAGURELE
+- **Status**: scraped
+
+### INGINER CONSTRUCTII HIDROTEHNICE
+
+- **URL**: [https://mediere.anofm.ro/app/module/mediere/job/3456682](https://mediere.anofm.ro/app/module/mediere/job/3456682)
+- **Location**: MAGURELE
+- **Status**: scraped
 
 ### STIVUITORIST
 
@@ -240,4 +342,4 @@
 - **Status**: scraped
 
 ---
-_Generated at 2026-11-24T17:14:42Z_
+_Generated at 2026-11-25T16:58:22Z_
